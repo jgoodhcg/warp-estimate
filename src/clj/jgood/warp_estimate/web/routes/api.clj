@@ -14,7 +14,8 @@
    [ring.adapter.undertow.websocket :as ws]
    [ring.util.http-response :as http-response]
    [clojure.pprint :refer [pprint]]
-   [cheshire.core :as json]))
+   [cheshire.core :as json])
+  (:import [java.util UUID]))
 
 (def route-data
   {:coercion   malli/coercion
@@ -56,6 +57,7 @@
   [body]
   (-> body html http-response/ok (http-response/content-type "text/html")))
 
+(def rooms (atom {}))
 
 ;; Routes
 (defn api-routes [_opts]
@@ -67,27 +69,50 @@
     {:get health/healthcheck!}]
 
    ["/"
-    (fn [_] (-> [:div.bg-slate-200.rounded.p-4 {:hx-ext "ws" :ws-connect "/api/ws-test"}
-                [:div {:id "echo"}]
-                [:form {:id "form" :ws-send true}
-                 [:input.p-2.rounded {:name "msg"}]]]
-
+    (fn [_] (-> [:div.bg-slate-200.rounded.p-4.grid.grid-cols-1.gap-y-4
+                {:id "main-container"}
+                [:button.bg-purple-500.outline.outline-indigo-500.rounded.text-white
+                 {:hx-post   (str "/api/create-room/" (java.util.UUID/randomUUID))
+                  :hx-target "#main-container"
+                  :hx-swap   "outerHTML"}
+                 "Create Room"]
+                [:button.outline.outline-indigo-500.rounded
+                 "Join Room"]
+                ]
                htmx-page))]
-   ["/tmp"
-    (fn [_] (-> [:div "tmp"] htmx-component))]
-   ["/ws-test"
-    (fn [request]
-      {:undertow/websocket
-       {:on-open          (fn [{:keys [channel]}] (println "WS open!"))
-        :on-message       (fn [{:keys [channel data]}]
-                            (let [data (json/parse-string data true)]
-                              (pprint {:location :on-message
-                                       :data data})
-                              (ws/send
-                               (-> [:div {:id "echo"} (:msg data)]
-                                   html)
-                               channel)))
-        :on-close-message (fn [{:keys [channel message]}] (println "WS closeed!"))}})]
+
+   ["/create-room/{room-id}"
+    (fn [{:keys [path-params]}]
+      (let [room-id (:room-id path-params)]
+        (swap! rooms assoc room-id {:channels #{}})
+        (-> [:div.bg-slate-200.rounded.p-4.grid.grid-cols-1.gap-y-4
+             {:id         "main-container"
+              :hx-ext     "ws"
+              :ws-connect (str "/api/join-room/" room-id)}
+             (str "You are in room " room-id)
+             [:div.outline.outline-indigo-500 {:id "msgs"}]]
+            htmx-component)))]
+
+   ["/join-room/{room-id}"
+    (fn [{:keys [path-params]}]
+      (let [room-id (:room-id path-params)]
+        {:undertow/websocket
+         {:on-open          (fn [{:keys [channel]}]
+                              (swap! rooms
+                                     (fn [rooms]
+                                       (update-in
+                                        rooms
+                                        [room-id :channels] conj channel)))
+                              (println "WS open!"))
+          :on-message       (fn [{:keys [channel data]}]
+                              (let [data (json/parse-string data true)]
+                                (pprint {:location :on-message
+                                         :data     data})
+                                (ws/send
+                                 (-> [:div {:id "echo"} (:msg data)]
+                                     html)
+                                 channel)))
+          :on-close-message (fn [{:keys [channel message]}] (println "WS closeed!"))}}))]
    ])
 
 (derive :reitit.routes/api :reitit/routes)
