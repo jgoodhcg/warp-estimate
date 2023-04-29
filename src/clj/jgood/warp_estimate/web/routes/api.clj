@@ -65,29 +65,40 @@
     {:id "main-container"}
     content]])
 
+(defn active-btn [opts label]
+  [:button.bg-blue-500.hover:bg-blue-700.text-white.font-semibold.py-2.px-4.rounded.w-full.md:w-64
+   opts
+   label])
+
+(defn passive-btn [opts label]
+  [:button.bg-transparent.text-blue-500.border.border-blue-500.hover:bg-blue-500.hover:text-white.font-semibold.py-2.px-4.rounded.w-full.md:w-64
+   opts
+   label])
+
 (defn landing []
   (let [room-url (str "/api/room/" (java.util.UUID/randomUUID))]
     (main-container
-      [:button.bg-blue-500.hover:bg-blue-700.text-white.font-semibold.py-2.px-4.rounded.w-full.md:w-64
-       {:hx-post     room-url
-        :hx-target   "#main-container"
-        :hx-swap     "outerHTML"
-        :hx-push-url room-url}
-       "Create Room"]
-      [:button.bg-transparent.text-blue-500.border.border-blue-500.hover:bg-blue-500.hover:text-white.font-semibold.py-2.px-4.rounded.w-full.md:w-64
-       {:hx-post     "/api/join-room-form"
-        :hx-target   "#main-container"
-        :hx-swap     "outerHTML"
-        :hx-push-url "/api/join-room-form"}
-       "Join Room"])))
+     (active-btn
+      {:hx-post     room-url
+       :hx-target   "#main-container"
+       :hx-swap     "outerHTML"
+       :hx-push-url room-url}
+      "Create Room")
+     (passive-btn
+      {:hx-post     "/api/join-room-form"
+       :hx-target   "#main-container"
+       :hx-swap     "outerHTML"
+       :hx-push-url "/api/join-room-form"}
+       "Join Room"))))
 
 (defn join-form []
   (main-container
    [:form.flex.flex-col.space-y-4
     [:label.block.text-gray-700.font-semibold "Room ID"]
     [:input.bg-white.border.border-gray-300.rounded.text-gray-700.px-3.py-2.leading-tight.focus:outline-none.focus:border-blue-500.w-full.md:w-64 {:type "text" :placeholder "Enter Room ID" :required true}]
-    [:button.bg-blue-500.hover:bg-blue-700.text-white.font-semibold.py-2.px-4.rounded.w-full.md:w-64
-     "Join"]]))
+    (active-btn
+     {}
+     "Join")]))
 
 (defn create-room!
   "create room if it doesn't exist"
@@ -104,7 +115,8 @@
     {:id         "main-container"
      :hx-ext     "ws"
      :ws-connect (str "/api/connect-room/" room-id)}
-    (str "You are in room " room-id)
+    [:span "You are in room: "]
+    [:span room-id]
     [:div.outline.outline-indigo-500 {:id "msgs"}]]))
 
 (defn page-or-comp [content {:keys [request-method]}]
