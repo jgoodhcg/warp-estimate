@@ -69,16 +69,17 @@
     {:get health/healthcheck!}]
 
    ["/"
-    (fn [_] (-> [:div.bg-slate-200.rounded.p-4.grid.grid-cols-1.gap-y-4
-                {:id "main-container"}
-                [:button.bg-purple-500.outline.outline-indigo-500.rounded.text-white
-                 {:hx-post   (str "/api/create-room/" (java.util.UUID/randomUUID))
-                  :hx-target "#main-container"
-                  :hx-swap   "outerHTML"}
-                 "Create Room"]
-                [:button.outline.outline-indigo-500.rounded
-                 "Join Room"]
-                ]
+    (fn [_] (-> [:div.flex.justify-center
+                [:div.bg-slate-200.rounded.p-4.flex.flex-col.items-center.w-full.md:w-96.align-center.gap-2
+                 {:id "main-container"}
+                 [:button.bg-blue-500.hover:bg-blue-700.text-white.font-semibold.py-2.px-4.rounded.w-full.md:w-64
+                  {:hx-post   (str "/api/create-room/" (java.util.UUID/randomUUID))
+                   :hx-target "#main-container"
+                   :hx-swap   "outerHTML"}
+                  "Create Room"]
+                 [:button.bg-transparent.text-blue-500.border.border-blue-500.hover:bg-blue-500.hover:text-white.font-semibold.py-2.px-4.rounded.w-full.md:w-64
+                  "Join Room"]
+                 ]]
                htmx-page))]
 
    ["/create-room/{room-id}"
