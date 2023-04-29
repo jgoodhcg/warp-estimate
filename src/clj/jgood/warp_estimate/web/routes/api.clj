@@ -54,10 +54,63 @@
       (http-response/content-type "text/html")))
 
 (defn htmx-component
-  [body]
-  (-> body html http-response/ok (http-response/content-type "text/html")))
+  [content]
+  (-> content html http-response/ok (http-response/content-type "text/html")))
 
 (def rooms (atom {}))
+
+(defn main-container [& content]
+  [:div.flex.justify-center
+   [:div.bg-slate-200.rounded.p-4.flex.flex-col.items-center.w-full.md:w-96.align-center.gap-2
+    {:id "main-container"}
+    content]])
+
+(defn landing []
+  (let [room-url (str "/api/room/" (java.util.UUID/randomUUID))]
+    (main-container
+      [:button.bg-blue-500.hover:bg-blue-700.text-white.font-semibold.py-2.px-4.rounded.w-full.md:w-64
+       {:hx-post     room-url
+        :hx-target   "#main-container"
+        :hx-swap     "outerHTML"
+        :hx-push-url room-url}
+       "Create Room"]
+      [:button.bg-transparent.text-blue-500.border.border-blue-500.hover:bg-blue-500.hover:text-white.font-semibold.py-2.px-4.rounded.w-full.md:w-64
+       {:hx-post     "/api/join-room-form"
+        :hx-target   "#main-container"
+        :hx-swap     "outerHTML"
+        :hx-push-url "/api/join-room-form"}
+       "Join Room"])))
+
+(defn join-form []
+  (main-container
+   [:form.flex.flex-col.space-y-4
+    [:label.block.text-gray-700.font-semibold "Room ID"]
+    [:input.bg-white.border.border-gray-300.rounded.text-gray-700.px-3.py-2.leading-tight.focus:outline-none.focus:border-blue-500.w-full.md:w-64 {:type "text" :placeholder "Enter Room ID" :required true}]
+    [:button.bg-blue-500.hover:bg-blue-700.text-white.font-semibold.py-2.px-4.rounded.w-full.md:w-64
+     "Join"]]))
+
+(defn create-room!
+  "create room if it doesn't exist"
+  [room-id]
+  (swap! rooms
+         (fn [rooms]
+           (if (not (-> rooms (contains? room-id)))
+             (-> rooms (assoc room-id {:channels #{}}))
+             rooms))))
+
+(defn joined-room [room-id]
+  (main-container
+   [:div.bg-slate-200.rounded.p-4.grid.grid-cols-1.gap-y-4
+    {:id         "main-container"
+     :hx-ext     "ws"
+     :ws-connect (str "/api/connect-room/" room-id)}
+    (str "You are in room " room-id)
+    [:div.outline.outline-indigo-500 {:id "msgs"}]]))
+
+(defn page-or-comp [content {:keys [request-method]}]
+  (if (= request-method :get)
+    (htmx-page content)
+    (htmx-component content)))
 
 ;; Routes
 (defn api-routes [_opts]
@@ -69,32 +122,19 @@
     {:get health/healthcheck!}]
 
    ["/"
-    (fn [_] (-> [:div.flex.justify-center
-                [:div.bg-slate-200.rounded.p-4.flex.flex-col.items-center.w-full.md:w-96.align-center.gap-2
-                 {:id "main-container"}
-                 [:button.bg-blue-500.hover:bg-blue-700.text-white.font-semibold.py-2.px-4.rounded.w-full.md:w-64
-                  {:hx-post   (str "/api/create-room/" (java.util.UUID/randomUUID))
-                   :hx-target "#main-container"
-                   :hx-swap   "outerHTML"}
-                  "Create Room"]
-                 [:button.bg-transparent.text-blue-500.border.border-blue-500.hover:bg-blue-500.hover:text-white.font-semibold.py-2.px-4.rounded.w-full.md:w-64
-                  "Join Room"]
-                 ]]
-               htmx-page))]
+    (fn [r] (-> (landing) (page-or-comp r)))]
 
-   ["/create-room/{room-id}"
-    (fn [{:keys [path-params]}]
+   ["/join-room-form"
+    (fn [r] (-> (join-form) (page-or-comp r)))]
+
+   ["/room/{room-id}"
+    (fn [{:keys [path-params]
+         :as r}]
       (let [room-id (:room-id path-params)]
-        (swap! rooms assoc room-id {:channels #{}})
-        (-> [:div.bg-slate-200.rounded.p-4.grid.grid-cols-1.gap-y-4
-             {:id         "main-container"
-              :hx-ext     "ws"
-              :ws-connect (str "/api/join-room/" room-id)}
-             (str "You are in room " room-id)
-             [:div.outline.outline-indigo-500 {:id "msgs"}]]
-            htmx-component)))]
+        (create-room! room-id)
+        (-> (joined-room room-id) (page-or-comp r))))]
 
-   ["/join-room/{room-id}"
+   ["/connect-room/{room-id}"
     (fn [{:keys [path-params]}]
       (let [room-id (:room-id path-params)]
         {:undertow/websocket
