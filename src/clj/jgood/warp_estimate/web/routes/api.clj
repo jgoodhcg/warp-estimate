@@ -127,6 +127,10 @@
         noun (rand-nth nouns)]
     (string/capitalize (str adjective " " noun))))
 
+(defn basic-input [opts]
+  [:input.bg-white.border.border-gray-300.rounded.text-gray-700.px-3.py-2.leading-tight.focus:outline-none.focus:border-blue-500.w-full.md:w-64
+   opts])
+
 (defn create-room-form []
   (let [room-id  (str (java.util.UUID/randomUUID))
         form-url (str "/api/room/" room-id)]
@@ -135,14 +139,35 @@
       {:hx-post    form-url
        :hx-trigger "submit"}
       [:label.block.text-gray-700.font-semibold "Your Name"]
-      [:input.bg-white.border.border-gray-300.rounded.text-gray-700.px-3.py-2.leading-tight.focus:outline-none.focus:border-blue-500.w-full.md:w-64
+      (basic-input
        {:type        "text"
         :placeholder "Enter Your Name"
         :id          "name"
-        :name        "name"}]
+        :name        "name"})
       (active-btn
        {:type "submit"}
        "Create Room")])))
+
+(defn join-room-form []
+  (main-container
+     [:form.flex.flex-col.space-y-4
+      {:hx-post    (str "/api/room")
+       :hx-trigger "submit"}
+      [:label.block.text-gray-700.font-semibold "Your Name"]
+      (basic-input
+       {:type        "text"
+        :placeholder "Enter Your Name"
+        :id          "name"
+        :name        "name"})
+      [:label.block.text-gray-700.font-semibold "Your Name"]
+      (basic-input
+       {:type        "text"
+        :placeholder "Enter Room ID"
+        :id          "room-id"
+        :name        "room-id"})
+      (active-btn
+       {:type "submit"}
+       "Join Room")]))
 
 ;; Routes
 (defn api-routes [_opts]
