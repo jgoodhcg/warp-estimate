@@ -16,7 +16,8 @@
    [reitit.ring.middleware.parameters :as parameters]
    [reitit.swagger :as swagger]
    [ring.adapter.undertow.websocket :as ws]
-   [ring.util.http-response :as http-response])
+   [ring.util.http-response :as http-response]
+   [ring.util.response :as response])
   (:import
    [java.util UUID]))
 
@@ -85,7 +86,13 @@
      :hx-target   "#main-container"
      :hx-swap     "outerHTML"
      :hx-push-url "/api/create-room-form"}
-    "Create Room")))
+    "Create Room")
+   (passive-btn
+    {:hx-post     "/api/join-room-form"
+     :hx-target   "#main-container"
+     :hx-swap     "outerHTML"
+     :hx-push-url "/api/join-room-form"}
+    "Join a Room")))
 
 (defn create-room!
   "create room if it doesn't exist"
@@ -151,8 +158,7 @@
 (defn join-room-form []
   (main-container
      [:form.flex.flex-col.space-y-4
-      {:hx-post    (str "/api/room")
-       :hx-trigger "submit"}
+      {:action "/api/submit-join-form" :method "post"}
       [:label.block.text-gray-700.font-semibold "Your Name"]
       (basic-input
        {:type        "text"
@@ -184,13 +190,24 @@
    ["/create-room-form"
     (fn [r] (-> (create-room-form) (page-or-comp r)))]
 
+   ["/join-room-form"
+    (fn [r] (-> (join-room-form) (page-or-comp r)))]
+
+   ["/submit-join-form"
+    (fn [{:keys [params]}]
+      (let [room-id (:room-id params)
+            name    (:name params)]
+        (-> (response/redirect (str "/api/room/" room-id "?name=" name)))))]
+
+   (->> [nil "" "1"] (some #(when (not (string/blank? %)) %)))
    ["/room/{room-id}"
     (fn [{:keys [path-params query-params params]
          :as   r}]
       (let [room-id (:room-id path-params)
             qp-name (:name query-params)
-            p-name (:name params)
-            name    (or p-name qp-name (random-name))]
+            p-name  (:name params)
+            name    (->> [p-name qp-name (random-name)]
+                         (some #(when (not (string/blank? %)) %)))]
         (create-room! room-id)
         (-> (joined-room room-id name) (page-or-comp r))))]
 
