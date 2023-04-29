@@ -83,22 +83,7 @@
        :hx-target   "#main-container"
        :hx-swap     "outerHTML"
        :hx-push-url room-url}
-      "Create Room")
-     (passive-btn
-      {:hx-post     "/api/join-room-form"
-       :hx-target   "#main-container"
-       :hx-swap     "outerHTML"
-       :hx-push-url "/api/join-room-form"}
-       "Join Room"))))
-
-(defn join-form []
-  (main-container
-   [:form.flex.flex-col.space-y-4
-    [:label.block.text-gray-700.font-semibold "Room ID"]
-    [:input.bg-white.border.border-gray-300.rounded.text-gray-700.px-3.py-2.leading-tight.focus:outline-none.focus:border-blue-500.w-full.md:w-64 {:type "text" :placeholder "Enter Room ID" :required true}]
-    (active-btn
-     {}
-     "Join")]))
+      "Create Room"))))
 
 (defn create-room!
   "create room if it doesn't exist"
@@ -112,9 +97,9 @@
 (defn joined-room [room-id]
   (main-container
    [:div.bg-slate-200.rounded.p-4.grid.grid-cols-1.gap-y-4
-    {:id         "main-container"
-     :hx-ext     "ws"
-     :ws-connect (str "/api/connect-room/" room-id)}
+    {:id          "main-container"
+     :hx-ext      "ws"
+     :ws-connect  (str "/api/connect-room/" room-id)}
     [:span "You are in room: "]
     [:span room-id]
     [:div.outline.outline-indigo-500 {:id "msgs"}]]))
@@ -135,9 +120,6 @@
 
    ["/"
     (fn [r] (-> (landing) (page-or-comp r)))]
-
-   ["/join-room-form"
-    (fn [r] (-> (join-form) (page-or-comp r)))]
 
    ["/room/{room-id}"
     (fn [{:keys [path-params]
@@ -162,7 +144,7 @@
                                 (pprint {:location :on-message
                                          :data     data})
                                 (ws/send
-                                 (-> [:div {:id "echo"} (:msg data)]
+                                 (-> [:div {:id "msgs"} (:msg data)]
                                      html)
                                  channel)))
           :on-close-message (fn [{:keys [channel message]}] (println "WS closeed!"))}}))]
@@ -175,3 +157,14 @@
       :or   {base-path ""}
       :as   opts}]
   [base-path route-data (api-routes opts)])
+
+(comment
+  (-> @rooms keys)
+  ;; => ("f02442df-8ed0-4871-a0d3-be6daf02946d")
+  (-> @rooms
+      (get "f02442df-8ed0-4871-a0d3-be6daf02946d")
+      :channels
+      (->> (map (fn [ch]
+                  (ws/send (-> [:div {:id "msgs"} "yo yo"] html) ch))))
+      )
+  )
