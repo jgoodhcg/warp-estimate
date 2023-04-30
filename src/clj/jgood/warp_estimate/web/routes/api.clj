@@ -8,6 +8,7 @@
    [integrant.core :as ig]
    [jgood.warp-estimate.web.controllers.health :as health]
    [jgood.warp-estimate.web.middleware.exception :as exception]
+   [com.rpl.specter :as sp]
    [jgood.warp-estimate.web.middleware.formats :as formats]
    [reitit.coercion.malli :as malli]
    [reitit.ring.coercion :as coercion]
@@ -64,7 +65,7 @@
 
 (defn main-container [& content]
   [:div.flex.justify-center
-   [:div.bg-slate-200.rounded.p-4.flex.flex-col.items-center.w-full.md:w-96.align-center.gap-2
+   [:div.bg-slate-200.rounded.p-4.flex.flex-col.items-center.w-fit.align-center.gap-2
     {:id "main-container"}
     content]])
 
@@ -102,24 +103,45 @@
              (-> rooms (assoc room-id {:channels #{}}))
              rooms))))
 
-(defn pointing-area [room]
-  [:div.flex.flex-col.mt-3
-   {:id "pointing-area"}
+(defn team-area [room]
+  [:div.flex.flex-col.p-4.md:w-64
+   {:id "team-area"}
    (-> room
        :people
        (->> (sort-by :name))
-       (->> (map (fn [{:keys [name]}]
-                   [:span name]))))])
+       (->> (map (fn [{:keys [name point]}]
+                   [:div.flex.flex-row.gap-2
+                    [:span name]
+                    [:span point]]))))])
+
+(defn pointing-area []
+  (let [fib-seq [1 2 3 5 8 13 21 50 100]]
+    [:div.grid.grid-cols-3.gap-4
+     (for [num fib-seq]
+       [:button.bg-blue-500.text-white.font-bold.py-2.px-4.rounded.hover:bg-blue-700
+        {:type       "button"
+         :hx-trigger "click"
+         :hx-swap    "none"
+         :hx-vals    (str "{\"point\":" num "}")
+         :ws-send    true}
+        (str num)])
+     [:button.bg-blue-500.text-white.font-bold.py-4.px-4.rounded.hover:bg-blue-700.col-span-3
+      {:type       "button"
+       :hx-trigger "click"
+       :hx-swap    "none"
+       :hx-vals    "{\"point\": \"?\"}"
+       :ws-send    true}
+      "?"]]))
 
 (defn joined-room [room-id name room]
   (main-container
-   [:div.bg-slate-200.rounded.p-4.grid.grid-cols-1.gap-y-4
+   [:div
     {:id          "main-container"
      :hx-ext      "ws"
      :ws-connect  (str "/api/connect-room/" room-id "/" name)}
-    [:span (str name ", You are in room: " )]
-    [:span room-id]
-    (pointing-area room)]))
+    [:div.flex.flex-col.md:flex-row
+     (team-area room)
+     (pointing-area)]]))
 
 (defn page-or-comp [content {:keys [request-method]}]
   (if (= request-method :get)
@@ -235,27 +257,35 @@
                                                                 :name    name})))
                               (let [room (-> @rooms (get room-id))]
                                 (doseq [{:keys [channel]} (-> room :people)]
-                                  (ws/send (-> (pointing-area room) html) channel)))
-                              )
+                                  (ws/send (-> (team-area room) html) channel))))
           :on-message       (fn [{:keys [channel data]}]
-                              (let [data (json/parse-string data true)]
+                              (let [data  (json/parse-string data true)
+                                    point (:point data)]
                                 (pprint {:location :on-message
-                                         :data     data})
-                                (ws/send
-                                 (-> [:div {:id "msgs"} (:msg data)]
-                                     html)
-                                 channel)))
+                                         :data     data
+                                         :point    point})
+                                (swap! rooms
+                                       (fn [rooms]
+                                         (->> rooms
+                                              (sp/transform [(sp/keypath room-id :people)
+                                                             sp/ALL
+                                                             #(= (:channel %) channel)]
+                                                            (fn [person]
+                                                              (merge person {:point point}))))))
+                                (let [room (-> @rooms (get room-id))]
+                                  (doseq [{:keys [channel]} (-> room :people)]
+                                    (ws/send (-> (team-area room) html) channel)))))
           :on-close-message (fn [{:keys [channel message]}]
                               (println (str name " has left " room-id))
                               (swap! rooms (fn [rooms]
-                                            (update-in
-                                             rooms
-                                             [room-id :people]
-                                             (fn [people]
-                                               (remove #(= (:channel %) channel) people)))))
+                                             (update-in
+                                              rooms
+                                              [room-id :people]
+                                              (fn [people]
+                                                (remove #(= (:channel %) channel) people)))))
                               (let [room (-> @rooms (get room-id))]
                                 (doseq [{:keys [channel]} (-> room :people)]
-                                  (ws/send (-> (pointing-area room) html) channel))))}}))]
+                                  (ws/send (-> (team-area room) html) channel))))}}))]
    ])
 
 (derive :reitit.routes/api :reitit/routes)
