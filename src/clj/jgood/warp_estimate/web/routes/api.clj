@@ -9,7 +9,6 @@
    [jgood.warp-estimate.web.controllers.health :as health]
    [jgood.warp-estimate.web.middleware.exception :as exception]
    [jgood.warp-estimate.web.middleware.formats :as formats]
-   [potpuri.core :as pot]
    [reitit.coercion.malli :as malli]
    [reitit.ring.coercion :as coercion]
    [reitit.ring.middleware.muuntaja :as muuntaja]
@@ -103,16 +102,24 @@
              (-> rooms (assoc room-id {:channels #{}}))
              rooms))))
 
-(defn joined-room [room-id name]
+(defn pointing-area [room]
+  [:div.flex.flex-col.mt-3
+   {:id "pointing-area"}
+   (-> room
+       :people
+       (->> (sort-by :name))
+       (->> (map (fn [{:keys [name]}]
+                   [:span name]))))])
+
+(defn joined-room [room-id name room]
   (main-container
    [:div.bg-slate-200.rounded.p-4.grid.grid-cols-1.gap-y-4
     {:id          "main-container"
      :hx-ext      "ws"
      :ws-connect  (str "/api/connect-room/" room-id "/" name)}
-    [:span "You are in room: "]
+    [:span (str name ", You are in room: " )]
     [:span room-id]
-    [:span "Your name: " name]
-    [:div.outline.outline-indigo-500 {:id "msgs"}]]))
+    (pointing-area room)]))
 
 (defn page-or-comp [content {:keys [request-method]}]
   (if (= request-method :get)
@@ -143,8 +150,9 @@
         form-url (str "/api/room/" room-id)]
     (main-container
      [:form.flex.flex-col.space-y-4
-      {:hx-post    form-url
-       :hx-trigger "submit"}
+      {:hx-post     form-url
+       :hx-trigger  "submit"
+       :hx-push-url form-url}
       [:label.block.text-gray-700.font-semibold "Your Name"]
       (basic-input
        {:type        "text"
@@ -209,7 +217,8 @@
             name    (->> [p-name qp-name (random-name)]
                          (some #(when (not (string/blank? %)) %)))]
         (create-room! room-id)
-        (-> (joined-room room-id name) (page-or-comp r))))]
+        (-> (joined-room room-id name (-> @rooms (get room-id)))
+            (page-or-comp r))))]
 
    ["/connect-room/{room-id}/{name}"
     (fn [{:keys [path-params]}]
@@ -217,13 +226,17 @@
             name    (:name path-params)]
         {:undertow/websocket
          {:on-open          (fn [{:keys [channel]}]
+                              (println (str name " has joined " room-id))
                               (swap! rooms
                                      (fn [rooms]
                                        (update-in
                                         rooms
                                         [room-id :people] conj {:channel channel
                                                                 :name    name})))
-                              (println "WS open!"))
+                              (let [room (-> @rooms (get room-id))]
+                                (doseq [{:keys [channel]} (-> room :people)]
+                                  (ws/send (-> (pointing-area room) html) channel)))
+                              )
           :on-message       (fn [{:keys [channel data]}]
                               (let [data (json/parse-string data true)]
                                 (pprint {:location :on-message
@@ -232,7 +245,17 @@
                                  (-> [:div {:id "msgs"} (:msg data)]
                                      html)
                                  channel)))
-          :on-close-message (fn [{:keys [channel message]}] (println "WS closeed!"))}}))]
+          :on-close-message (fn [{:keys [channel message]}]
+                              (println (str name " has left " room-id))
+                              (swap! rooms (fn [rooms]
+                                            (update-in
+                                             rooms
+                                             [room-id :people]
+                                             (fn [people]
+                                               (remove #(= (:channel %) channel) people)))))
+                              (let [room (-> @rooms (get room-id))]
+                                (doseq [{:keys [channel]} (-> room :people)]
+                                  (ws/send (-> (pointing-area room) html) channel))))}}))]
    ])
 
 (derive :reitit.routes/api :reitit/routes)
@@ -245,11 +268,11 @@
 
 (comment
   (-> @rooms keys)
-  ;; => ("f02442df-8ed0-4871-a0d3-be6daf02946d")
   (-> @rooms
-      (get "f02442df-8ed0-4871-a0d3-be6daf02946d")
-      :channels
-      (->> (map (fn [ch]
-                  (ws/send (-> [:div {:id "msgs"} "yo yo"] html) ch))))
+      (get "8bdef2ab-ab5a-4382-9326-ef4a932a0c10")
+      :people
+      (->> (map :name))
+      #_(->> (map (fn [{ch :channel}]
+                  (ws/send (-> [:div {:id "pointing-area"} "hello there"] html) ch))))
       )
   )
